@@ -128,6 +128,11 @@ class Wp_Laravel_User {
 		 */
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'public/class-wp-laravel-user-public.php';
 
+		/**
+		 * This file is responsible to load all public functions
+		 */
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/functions.php';
+
 		$this->loader = new Wp_Laravel_User_Loader();
 
 	}

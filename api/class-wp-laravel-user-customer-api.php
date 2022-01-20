@@ -22,6 +22,80 @@ class Wp_Laravel_User_Customer_Api extends WP_REST_Controller {
         );
     }
 
+
+    /**
+     * Retrieves the contact schema, conforming to JSON Schema.
+     *
+     * @return array
+     */
+    public function get_item_schema() {
+        if ( $this->schema ) {
+            return $this->add_additional_fields_schema( $this->schema );
+        }
+
+        $schema = [
+            '$schema'    => 'http://json-schema.org/draft-04/schema#',
+            'title'      => 'customer',
+            'type'       => 'object',
+            'properties' => [
+                'id' => [
+                    'description' => __( 'Unique identifier for the object.' ),
+                    'type'        => 'integer',
+                    'context'     => [ 'view', 'edit' ],
+                    'readonly'    => true,
+                ],
+                'name' => [
+                    'description' => __( 'Name of the customer.' ),
+                    'type'        => 'string',
+                    'context'     => [ 'view', 'edit' ],
+                    'required'    => true,
+                    'arg_options' => [
+                        'sanitize_callback' => 'sanitize_text_field',
+                    ],
+                ],
+                'phone' => [
+                    'description' => __( 'Phone number of the customer.' ),
+                    'type'        => 'string',
+                    'required'    => true,
+                    'context'     => [ 'view', 'edit' ],
+                    'arg_options' => [
+                        'sanitize_callback' => 'sanitize_text_field',
+                    ],
+                ],  
+                'email' => [
+                    'description' => __( 'Email of the customer.' ),
+                    'type'        => 'string',
+                    'context'     => [ 'view', 'edit' ],
+                    'required'    => true,
+                    'arg_options' => [
+                        'sanitize_callback' => 'sanitize_text_field',
+                    ],
+                ],
+                'budget' => [
+                    'description' => __( 'Budget of the customer.' ),
+                    'type'        => 'string',
+                    'context'     => [ 'view', 'edit' ],
+                    'required'    => true,
+                    'arg_options' => [
+                        'sanitize_callback' => 'sanitize_text_field',
+                    ],
+                ],
+                'message' => [
+                    'description' => __( "Message of the customer." ),
+                    'type'        => 'string',
+                    'context'     => [ 'view', 'edit' ],
+                    'arg_options' => [
+                        'sanitize_callback' => 'sanitize_text_field',
+                    ],
+                ],
+            ]
+        ];
+
+        $this->schema = $schema;
+
+        return $this->add_additional_fields_schema( $this->schema );
+    }
+
     /**
      * Checks if a given request has access to read contacts.
      *
@@ -55,41 +129,41 @@ class Wp_Laravel_User_Customer_Api extends WP_REST_Controller {
      *
      * @return \WP_Error|WP_REST_Response
      */
-    public function create_item( $request ) {
-        $contact = $this->prepare_item_for_database( $request );
+    public function create_customer( $request ) {
+        $customer = $this->prepare_item_for_database( $request );
 
-        if ( is_wp_error( $contact ) ) {
-            return $contact;
+        if ( is_wp_error( $customer ) ) {
+            return $customer;
         }
 
-        $contact_id = $this->wp_laravel_user_create_customer( $contact );
+        $customer_id = $this->wp_laravel_user_create_customer( $customer );
 
-        if ( is_wp_error( $contact_id ) ) {
-            $contact_id->add_data( [ 'status' => 400 ] );
+        if ( is_wp_error( $customer_id ) ) {
+            $customer_id->add_data( [ 'status' => 400 ] );
 
-            return $contact_id;
+            return $customer_id;
         }
 
-        $contact = $this->get_customer( $contact_id );
-        $response = $this->prepare_item_for_response( $contact, $request );
+        $customer = $this->get_customer( $customer_id );
+        $response = $this->prepare_item_for_response( $customer, $request );
 
         $response->set_status( 201 );
-        $response->header( 'Location', rest_url( sprintf( '%s/%s/%d', $this->namespace, $this->rest_base, $contact_id ) ) );
+        $response->header( 'Location', rest_url( sprintf( '%s/%s/%d', $this->namespace, $this->rest_base, $customer_id ) ) );
 
         return rest_ensure_response( $response );
     }
 
     /**
-     * Get the address, if the ID is valid.
+     * Get the customer, if the ID is valid.
      *
      * @param int $id Supplied ID.
      *
      * @return Object|\WP_Error
      */
     protected function get_customer( $id ) {
-        $contact = wd_ac_get_address( $id );
+        $customer = wlu_get_customer( $id );
 
-        if ( ! $contact ) {
+        if ( ! $customer ) {
             return new WP_Error(
                 'rest_contact_invalid_id',
                 __( 'Invalid contact ID.' ),
@@ -97,7 +171,7 @@ class Wp_Laravel_User_Customer_Api extends WP_REST_Controller {
             );
         }
 
-        return $contact;
+        return $customer;
     }
 
     /**
@@ -114,15 +188,41 @@ class Wp_Laravel_User_Customer_Api extends WP_REST_Controller {
             $prepared['name'] = $request['name'];
         }
 
-        if ( isset( $request['address'] ) ) {
-            $prepared['address'] = $request['address'];
-        }
-
-        if ( isset( $request['phone'] ) ) {
-            $prepared['phone'] = $request['phone'];
+        if ( isset( $request['email'] ) ) {
+            $prepared['email'] = $request['email'];
         }
 
         return $prepared;
+    }
+
+
+    /**
+     * Prepares the item for the REST response.
+     *
+     * @param mixed           $item    WordPress representation of the item.
+     * @param \WP_REST_Request $request Request object.
+     *
+     * @return \WP_Error|WP_REST_Response
+     */
+    public function prepare_item_for_response( $item, $request ) {
+        $data   = [];
+        $fields = $this->get_fields_for_response( $request );
+
+        if ( in_array( 'id', $fields, true ) ) {
+            $data['id'] = (int) $item->id;
+        }
+
+        if ( in_array( 'name', $fields, true ) ) {
+            $data['name'] = $item->name;
+        }
+
+        $context = ! empty( $request['context'] ) ? $request['context'] : 'view';
+        $data    = $this->filter_response_by_context( $data, $context );
+
+        $response = rest_ensure_response( $data );
+        $response->add_links( $this->prepare_links( $item ) );
+
+        return $response;
     }
 
     /**
@@ -135,16 +235,14 @@ class Wp_Laravel_User_Customer_Api extends WP_REST_Controller {
     function wp_laravel_user_create_customer( $args = [] ) {
         global $wpdb;
 
-        if ( empty( $args['name'] ) ) {
-            return new \WP_Error( 'no-name', __( 'You must provide a name.', 'wedevs-academy' ) );
+        if ( empty( $args['name'] ) || empty( $args['email'] ) ) {
+            return new \WP_Error( 'no-name-or-email', __( 'Please provide a valid name and email for user.', 'wp-laravel-user' ) );
         }
 
         $defaults = [
-            'name'       => '',
-            'address'    => '',
-            'phone'      => '',
-            'created_by' => get_current_user_id(),
-            'created_at' => current_time( 'mysql' ),
+            'name'          => '',
+            'email'         => '',
+            'password'      => ''
         ];
 
         $data = wp_parse_args( $args, $defaults );
@@ -154,45 +252,22 @@ class Wp_Laravel_User_Customer_Api extends WP_REST_Controller {
             $id = $data['id'];
             unset( $data['id'] );
 
-            $updated = $wpdb->update(
-                $wpdb->prefix . 'ac_addresses',
-                $data,
-                [ 'id' => $id ],
-                [
-                    '%s',
-                    '%s',
-                    '%s',
-                    '%d',
-                    '%s'
-                ],
-                [ '%d' ]
-            );
-
-            wd_ac_address_purge_cache( $id );
+            // Update customer data
 
             return $updated;
 
         } else {
 
-            $inserted = $wpdb->insert(
-                $wpdb->prefix . 'ac_addresses',
-                $data,
-                [
-                    '%s',
-                    '%s',
-                    '%s',
-                    '%d',
-                    '%s'
-                ]
-            );
-
-            if ( ! $inserted ) {
-                return new \WP_Error( 'failed-to-insert', __( 'Failed to insert data', 'wedevs-academy' ) );
+            if (username_exists($data['name']) == null && email_exists($data['email']) == false) {
+                $user_id = wp_create_user( $data['name'], wp_generate_password(), $data['email'] );
+                $user = get_user_by( 'id', $user_id );
+                $user->add_role( 'subscriber' );
+            } else {
+                return new \WP_Error( 'failed-to-insert', __( 'Failed to insert data', 'wp-laravel-user' ) );
             }
 
-            wd_ac_address_purge_cache();
-
-            return $wpdb->insert_id;
+            
+            return $user_id;
         }
     }
 }
