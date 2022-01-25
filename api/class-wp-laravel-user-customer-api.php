@@ -161,12 +161,12 @@ class Wp_Laravel_User_Customer_Api extends WP_REST_Controller {
      * @return Object|\WP_Error
      */
     protected function get_customer( $id ) {
-        $customer = wlu_get_customer( $id );
+        $customer = get_user_by( 'ID', $id );
 
         if ( ! $customer ) {
             return new WP_Error(
-                'rest_contact_invalid_id',
-                __( 'Invalid contact ID.' ),
+                'rest_customer_invalid_id',
+                __( 'Invalid customer ID.' ),
                 [ 'status' => 404 ]
             );
         }
@@ -213,14 +213,18 @@ class Wp_Laravel_User_Customer_Api extends WP_REST_Controller {
         }
 
         if ( in_array( 'name', $fields, true ) ) {
-            $data['name'] = $item->name;
+            $data['name'] = $item->display_name;
+        }
+
+        
+        if ( in_array( 'email', $fields, true ) ) {
+            $data['email'] = $item->user_email;
         }
 
         $context = ! empty( $request['context'] ) ? $request['context'] : 'view';
         $data    = $this->filter_response_by_context( $data, $context );
 
         $response = rest_ensure_response( $data );
-        $response->add_links( $this->prepare_links( $item ) );
 
         return $response;
     }
@@ -233,8 +237,6 @@ class Wp_Laravel_User_Customer_Api extends WP_REST_Controller {
      * @return int|WP_Error
      */
     function wp_laravel_user_create_customer( $args = [] ) {
-        global $wpdb;
-
         if ( empty( $args['name'] ) || empty( $args['email'] ) ) {
             return new \WP_Error( 'no-name-or-email', __( 'Please provide a valid name and email for user.', 'wp-laravel-user' ) );
         }
@@ -247,27 +249,15 @@ class Wp_Laravel_User_Customer_Api extends WP_REST_Controller {
 
         $data = wp_parse_args( $args, $defaults );
 
-        if ( isset( $data['id'] ) ) {
-
-            $id = $data['id'];
-            unset( $data['id'] );
-
-            // Update customer data
-
-            return $updated;
-
+        $user_id = username_exists($data['name']);
+        if ($user_id == null && email_exists($data['email']) == false) {
+            $user_id = wp_create_user( $data['name'], wp_generate_password(), $data['email'] );
+            $user = get_user_by( 'id', $user_id );
+            $user->add_role( 'subscriber' );
         } else {
-
-            if (username_exists($data['name']) == null && email_exists($data['email']) == false) {
-                $user_id = wp_create_user( $data['name'], wp_generate_password(), $data['email'] );
-                $user = get_user_by( 'id', $user_id );
-                $user->add_role( 'subscriber' );
-            } else {
-                return new \WP_Error( 'failed-to-insert', __( 'Failed to insert data', 'wp-laravel-user' ) );
-            }
-
-            
-            return $user_id;
+            return new \WP_Error( 'user-already-exist', __( 'Username or email already exists', 'wp-laravel-user' ) );
         }
+
+        return $user_id;
     }
 }
