@@ -100,13 +100,29 @@ class Wp_Laravel_User_Admin {
 
 	}
 
-
-    public function add_menu() {
-        // add_menu_page( $page_title, $menu_title, $capability, $menu_slug, $function, $icon_url, $position );
-        add_menu_page( "Customers", "Customers", 'manage_options', $this->plugin_name . '-customers', array( $this, 'l_page_customers' ));
+    public function wlu_users_init() {
+        if ( is_admin() ){
+            add_filter( 'manage_users_columns', [ $this, 'wlu_modify_user_table'] );
+            add_filter( 'manage_users_custom_column', [ $this, 'wlu_modify_user_table_row'], 10, 3 );
+        }
     }
 
-    public function l_page_customers() {
-        include( plugin_dir_path( __FILE__ ) . 'partials/wp-laravel-user-admin-customers-list.php' );
+    function wlu_modify_user_table( $columns ) {
+        $columns['source'] = 'Source';
+        return $columns;
+    }
+
+    function wlu_modify_user_table_row( $output, $column_id, $uid ) {
+        $user_obj = get_userdata( $uid );
+
+        if($column_id == 'source') {
+            $url = get_user_meta($user_obj->ID, '_subscriber_' . $column_id, true);
+            if ($url) {
+                return '<a target="_blank" href="'. $url .'">Laravel panel</a>';
+            }
+
+            return null;
+        }
+        return $output;
     }
 }

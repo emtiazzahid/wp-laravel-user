@@ -144,8 +144,8 @@ class Wp_Laravel_User_Customer_Api extends WP_REST_Controller {
             return $customer_id;
         }
 
-        $customer = $this->get_customer( $customer_id );
-        $response = $this->prepare_item_for_response( $customer, $request );
+        $customer_data = $this->get_customer( $customer_id );
+        $response = $this->prepare_item_for_response( $customer_data, $request );
 
         $response->set_status( 201 );
         $response->header( 'Location', rest_url( sprintf( '%s/%s/%d', $this->namespace, $this->rest_base, $customer_id ) ) );
@@ -158,10 +158,11 @@ class Wp_Laravel_User_Customer_Api extends WP_REST_Controller {
      *
      * @param int $id Supplied ID.
      *
-     * @return Object|\WP_Error
+     * @return array|Object|WP_Error
      */
     protected function get_customer( $id ) {
         $customer = get_user_by( 'ID', $id );
+        $customer_meta_fields = get_user_meta( $id );
 
         if ( ! $customer ) {
             return new WP_Error(
@@ -171,7 +172,10 @@ class Wp_Laravel_User_Customer_Api extends WP_REST_Controller {
             );
         }
 
-        return $customer;
+        return [
+            'customer' => $customer,
+            'customer_meta_fields' => $customer_meta_fields,
+        ];
     }
 
     /**
@@ -188,8 +192,24 @@ class Wp_Laravel_User_Customer_Api extends WP_REST_Controller {
             $prepared['name'] = $request['name'];
         }
 
+        if ( isset( $request['phone'] ) ) {
+            $prepared['phone'] = $request['phone'];
+        }
+
         if ( isset( $request['email'] ) ) {
             $prepared['email'] = $request['email'];
+        }
+
+        if ( isset( $request['budget'] ) ) {
+            $prepared['budget'] = $request['budget'];
+        }
+
+        if ( isset( $request['message'] ) ) {
+            $prepared['message'] = $request['message'];
+        }
+
+        if ( isset( $request['source'] ) ) {
+            $prepared['source'] = $request['source'];
         }
 
         return $prepared;
@@ -205,20 +225,38 @@ class Wp_Laravel_User_Customer_Api extends WP_REST_Controller {
      * @return \WP_Error|WP_REST_Response
      */
     public function prepare_item_for_response( $item, $request ) {
+        $customer = $item['customer'];
+        $customer_meta_fields = $item['customer_meta_fields'];
+
         $data   = [];
         $fields = $this->get_fields_for_response( $request );
 
         if ( in_array( 'id', $fields, true ) ) {
-            $data['id'] = (int) $item->id;
+            $data['id'] = (int) $customer->id;
         }
 
         if ( in_array( 'name', $fields, true ) ) {
-            $data['name'] = $item->display_name;
+            $data['name'] = $customer->display_name;
         }
 
-        
+        if ( in_array( 'phone', $fields, true ) ) {
+            $data['phone'] = isset($customer_meta_fields['_subscriber_phone']) ? $customer_meta_fields['_subscriber_phone'][0] : '';
+        }
+
         if ( in_array( 'email', $fields, true ) ) {
-            $data['email'] = $item->user_email;
+            $data['email'] = $customer->user_email;
+        }
+
+        if ( in_array( 'budget', $fields, true ) ) {
+            $data['budget'] = isset($customer_meta_fields['_subscriber_budget']) ? $customer_meta_fields['_subscriber_budget'][0] : '';
+        }
+
+        if ( in_array( 'message', $fields, true ) ) {
+            $data['message'] = isset($customer_meta_fields['_subscriber_message']) ? $customer_meta_fields['_subscriber_message'][0] : '';
+        }
+
+        if ( in_array( 'source', $fields, true ) ) {
+            $data['source'] = isset($customer_meta_fields['_subscriber_source']) ? $customer_meta_fields['_subscriber_source'][0] : '';
         }
 
         $context = ! empty( $request['context'] ) ? $request['context'] : 'view';
@@ -243,15 +281,24 @@ class Wp_Laravel_User_Customer_Api extends WP_REST_Controller {
 
         $defaults = [
             'name'          => '',
+            'phone'         => '',
             'email'         => '',
-            'password'      => ''
+            'budget'         => '',
+            'message'         => '',
+            'source'         => ''
         ];
 
         $data = wp_parse_args( $args, $defaults );
+        $username = str_replace(' ','_',strtolower($data['name']));
 
-        $user_id = username_exists($data['name']);
+        $user_id = username_exists($username);
         if ($user_id == null && email_exists($data['email']) == false) {
-            $user_id = wp_create_user( $data['name'], wp_generate_password(), $data['email'] );
+            $user_id = wp_create_user( $username, wp_generate_password(), $data['email'] );
+            update_user_meta( $user_id, "first_name",  $data['name'] ) ;
+            unset($data['name']);
+            unset($data['email']);
+            $this->update_user_meta_list($user_id, $data);
+
             $user = get_user_by( 'id', $user_id );
             $user->add_role( 'subscriber' );
         } else {
@@ -259,5 +306,15 @@ class Wp_Laravel_User_Customer_Api extends WP_REST_Controller {
         }
 
         return $user_id;
+    }
+
+    /**
+     * @param $user_id
+     * @param $meta_list
+     */
+    private function update_user_meta_list($user_id, $meta_list) {
+        foreach ($meta_list as $key => $item) {
+            update_user_meta($user_id, '_subscriber_' . $key, $item );
+        }
     }
 }
